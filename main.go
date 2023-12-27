@@ -3,27 +3,36 @@ package main
 import (
 	"log"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
-func middlewareCors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func startServer(port string) {
-	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(".")))
-	corsMux := middlewareCors(mux)
+	cfg := apiConfig{0}
 
-	srv := http.Server{Addr: "localhost:" + port, Handler: corsMux}
+	mainRouter := chi.NewRouter()
+	apiRouter := chi.NewRouter()
+	adminRouter := chi.NewRouter()
+
+	fileHandler := http.StripPrefix("/app", http.FileServer(http.Dir(".")))
+	mainRouter.Handle("/app/*", cfg.middlewareMetricsIncrementer(fileHandler))
+	mainRouter.Handle("/app", cfg.middlewareMetricsIncrementer(fileHandler))
+
+	apiRouter.Get("/healthz/", readinessHandler)
+	apiRouter.Get("/healthz", readinessHandler)
+
+	adminRouter.Get("/metrics/", cfg.serveHitCountMetrics)
+	adminRouter.Get("/metrics", cfg.serveHitCountMetrics)
+
+	apiRouter.HandleFunc("/reset/", cfg.resetHitCountMetrics)
+	apiRouter.HandleFunc("/reset", cfg.resetHitCountMetrics)
+
+	mainRouter.Mount("/api/", apiRouter)
+	mainRouter.Mount("/admin/", adminRouter)
+
+	corsRouter := middlewareCors(mainRouter)
+
+	srv := &http.Server{Addr: ":" + port, Handler: corsRouter}
 
 	log.Printf("Starting server on port: %s", port)
 	log.Fatal(srv.ListenAndServe())

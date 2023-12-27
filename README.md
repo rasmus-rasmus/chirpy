@@ -1,2 +1,3 @@
 # chirpy
-Guided project from boot.dev.
+
+Solution to assignments from the "Learn Web Servers" course on boot.dev.
