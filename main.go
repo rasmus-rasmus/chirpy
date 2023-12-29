@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fsdb"
 	"log"
 	"net/http"
 
@@ -18,14 +19,16 @@ func startServer(port string) {
 	mainRouter.Handle("/app/*", cfg.middlewareMetricsIncrementer(fileHandler))
 	mainRouter.Handle("/app", cfg.middlewareMetricsIncrementer(fileHandler))
 
-	apiRouter.Get("/healthz/", readinessHandler)
-	apiRouter.Get("/healthz", readinessHandler)
-
-	adminRouter.Get("/metrics/", cfg.serveHitCountMetrics)
 	adminRouter.Get("/metrics", cfg.serveHitCountMetrics)
 
-	apiRouter.HandleFunc("/reset/", cfg.resetHitCountMetrics)
+	db, dbErr := fsdb.NewDB("./database.json")
+	if dbErr != nil {
+		log.Fatal("Could not open database connection", dbErr.Error())
+	}
+	apiRouter.Get("/healthz", readinessHandler)
 	apiRouter.HandleFunc("/reset", cfg.resetHitCountMetrics)
+	apiRouter.Post("/chirps", makeChirpsPostHandler(db))
+	apiRouter.Get("/chirps", makeChirpsGetHandler(db))
 
 	mainRouter.Mount("/api/", apiRouter)
 	mainRouter.Mount("/admin/", adminRouter)
