@@ -71,6 +71,20 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	return allChirps, nil
 }
 
+func (db *DB) GetUniqueChirp(chirpId int) (Chirp, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return Chirp{}, loadErr
+	}
+	chirp, ok := dbStructure.Chirps[chirpId]
+	if !ok {
+		return Chirp{}, errors.New("Invalid chirp id")
+	}
+	return chirp, nil
+}
+
 func (db *DB) CreateChirp(body string) (Chirp, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()

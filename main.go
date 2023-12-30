@@ -25,10 +25,12 @@ func startServer(port string) {
 	if dbErr != nil {
 		log.Fatal("Could not open database connection", dbErr.Error())
 	}
+
 	apiRouter.Get("/healthz", readinessHandler)
 	apiRouter.HandleFunc("/reset", cfg.resetHitCountMetrics)
 	apiRouter.Post("/chirps", makeChirpsPostHandler(db))
 	apiRouter.Get("/chirps", makeChirpsGetHandler(db))
+	apiRouter.Get("/chirps/{chirpId}", makeChirpsGetUniqueHandler(db))
 
 	mainRouter.Mount("/api/", apiRouter)
 	mainRouter.Mount("/admin/", adminRouter)

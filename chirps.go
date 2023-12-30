@@ -7,7 +7,10 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func makeChirpsPostHandler(db *fsdb.DB) func(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +46,25 @@ func makeChirpsGetHandler(db *fsdb.DB) func(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		respondWithJSON(w, 200, chirps)
+	}
+}
+
+func makeChirpsGetUniqueHandler(db *fsdb.DB) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		chirpId, atoiErr := strconv.Atoi(chi.URLParam(r, "chirpId"))
+		if atoiErr != nil {
+			respondWithError(w, 500, atoiErr.Error())
+		}
+		chirp, getErr := db.GetUniqueChirp(chirpId)
+		if getErr != nil {
+			if getErr.Error() == "Invalid chirp id" {
+				respondWithError(w, 404, "Chirp does not exist")
+				return
+			}
+			respondWithError(w, 500, getErr.Error())
+			return
+		}
+		respondWithJSON(w, 200, chirp)
 	}
 }
 
