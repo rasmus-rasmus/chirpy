@@ -11,6 +11,7 @@
 # Project specific ignores
 out
 database.json
+database.debug.json
 
 # Test binary, built with `go test -c`
 *.test
