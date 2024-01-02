@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fsdb"
 	"net/http"
 	"slices"
 	"strconv"
@@ -12,59 +11,53 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func makeChirpsPostHandler(db *fsdb.DB) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		decoder := json.NewDecoder(r.Body)
-		reqBody := struct {
-			Body string `json:"body"`
-		}{}
-		decoderErr := decoder.Decode(&reqBody)
-		if decoderErr != nil {
-			respondWithError(w, 500, decoderErr.Error())
-			return
-		}
-
-		cleanBody, validationErr := validateChirp(reqBody.Body)
-		if validationErr != nil {
-			respondWithError(w, 400, validationErr.Error())
-			return
-		}
-		chirp, createErr := db.CreateChirp(cleanBody)
-		if createErr != nil {
-			respondWithError(w, 500, createErr.Error())
-		}
-		respondWithJSON(w, 201, chirp)
+func (cfg *apiConfig) chirpsPostHandler(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	reqBody := struct {
+		Body string `json:"body"`
+	}{}
+	decoderErr := decoder.Decode(&reqBody)
+	if decoderErr != nil {
+		respondWithError(w, 500, decoderErr.Error())
+		return
 	}
+
+	cleanBody, validationErr := validateChirp(reqBody.Body)
+	if validationErr != nil {
+		respondWithError(w, 400, validationErr.Error())
+		return
+	}
+	chirp, createErr := cfg.db.CreateChirp(cleanBody)
+	if createErr != nil {
+		respondWithError(w, 500, createErr.Error())
+	}
+	respondWithJSON(w, 201, chirp)
 }
 
-func makeChirpsGetHandler(db *fsdb.DB) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		chirps, getErr := db.GetChirps()
-		if getErr != nil {
-			respondWithError(w, 500, getErr.Error())
-			return
-		}
-		respondWithJSON(w, 200, chirps)
+func (cfg *apiConfig) chirpsGetHandler(w http.ResponseWriter, r *http.Request) {
+	chirps, getErr := cfg.db.GetChirps()
+	if getErr != nil {
+		respondWithError(w, 500, getErr.Error())
+		return
 	}
+	respondWithJSON(w, 200, chirps)
 }
 
-func makeChirpsGetUniqueHandler(db *fsdb.DB) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		chirpId, atoiErr := strconv.Atoi(chi.URLParam(r, "chirpId"))
-		if atoiErr != nil {
-			respondWithError(w, 500, atoiErr.Error())
-		}
-		chirp, getErr := db.GetUniqueChirp(chirpId)
-		if getErr != nil {
-			if getErr.Error() == "Invalid chirp id" {
-				respondWithError(w, 404, "Chirp does not exist")
-				return
-			}
-			respondWithError(w, 500, getErr.Error())
+func (cfg *apiConfig) chirpsGetUniqueHandler(w http.ResponseWriter, r *http.Request) {
+	chirpId, atoiErr := strconv.Atoi(chi.URLParam(r, "chirpId"))
+	if atoiErr != nil {
+		respondWithError(w, 500, atoiErr.Error())
+	}
+	chirp, getErr := cfg.db.GetUniqueChirp(chirpId)
+	if getErr != nil {
+		if getErr.Error() == "Invalid chirp id" {
+			respondWithError(w, 404, "Chirp does not exist")
 			return
 		}
-		respondWithJSON(w, 200, chirp)
+		respondWithError(w, 500, getErr.Error())
+		return
 	}
+	respondWithJSON(w, 200, chirp)
 }
 
 func validateChirp(chirpBody string) (string, error) {

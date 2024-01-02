@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type DB struct {
@@ -17,7 +19,7 @@ type DB struct {
 
 type DBStructure struct {
 	Chirps   map[int]Chirp     `json:"chirps"`
-	Users    map[int]User      `json:"users"`
+	Users    map[int]DBUser    `json:"users"`
 	Metadata map[string]string `json:"metadata"`
 }
 
@@ -29,6 +31,11 @@ type Chirp struct {
 type User struct {
 	Id    int    `json:"id"`
 	Email string `json:"email"`
+}
+
+type DBUser struct {
+	User
+	Password string `json:"password"`
 }
 
 // NB: Only exported functions are ensured to be thread safe
@@ -56,7 +63,7 @@ func (db *DB) loadDB() (DBStructure, error) {
 func (db *DB) ensureDB() error {
 	_, statErr := os.Stat(db.Path)
 	if errors.Is(statErr, os.ErrNotExist) {
-		dbStructure := DBStructure{make(map[int]Chirp), make(map[int]User), map[string]string{"nextChirpId": "1", "nextUserId": "1"}}
+		dbStructure := DBStructure{make(map[int]Chirp), make(map[int]DBUser), map[string]string{"nextChirpId": "1", "nextUserId": "1"}}
 		return db.writeDB(dbStructure)
 	}
 	return statErr
@@ -109,22 +116,77 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 	return newChirp, writeErr
 }
 
-func (db *DB) CreateUser(email string) (User, error) {
+func (db *DB) CreateUser(email string, password string) (User, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	dbStructure, loadErr := db.loadDB()
 	if loadErr != nil {
 		return User{}, loadErr
 	}
+	for _, val := range dbStructure.Users {
+		if val.Email == email {
+			return User{}, errors.New("Unique email constraint")
+		}
+	}
 	nextUserId, atoiErr := strconv.Atoi(dbStructure.Metadata["nextUserId"])
 	if atoiErr != nil {
 		return User{}, atoiErr
 	}
-	newUser := User{Id: nextUserId, Email: email}
+	newUser := DBUser{User: User{nextUserId, email}, Password: password}
 	dbStructure.Users[nextUserId] = newUser
 	dbStructure.Metadata["nextUserId"] = fmt.Sprintf("%d", nextUserId+1)
 	writeErr := db.writeDB(dbStructure)
-	return newUser, writeErr
+	return newUser.User, writeErr
+}
+
+func (db *DB) ValidateUser(email string, password string) (User, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return User{}, loadErr
+	}
+	for _, val := range dbStructure.Users {
+		if val.Email == email {
+			if bcrypt.CompareHashAndPassword([]byte(val.Password), []byte(password)) == nil {
+				return val.User, nil
+			}
+			return User{}, errors.New("Incorrect password")
+		}
+	}
+	return User{}, errors.New("User doesn't exist")
+}
+
+func (db *DB) GetUser(userId int) (User, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return User{}, loadErr
+	}
+	user, ok := dbStructure.Users[userId]
+	if !ok {
+		return User{}, errors.New("Invalid user id")
+	}
+	return user.User, nil
+}
+
+func (db *DB) UpdateUser(userId int, newEmail, newPassword string) (User, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return User{}, loadErr
+	}
+	user, ok := dbStructure.Users[userId]
+	if !ok {
+		return User{}, errors.New("Invalid user id")
+	}
+	user.Email = newEmail
+	user.Password = newPassword
+	dbStructure.Users[userId] = user
+	writeErr := db.writeDB(dbStructure)
+	return user.User, writeErr
 }
 
 func NewDB(path string) (*DB, error) {

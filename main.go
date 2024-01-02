@@ -11,10 +11,30 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 )
 
+type apiConfig struct {
+	fileServerHits int
+	jwtSecret      string
+	db             *fsdb.DB
+}
+
 func startServer(port string, debug bool, dbPathChan chan string) {
-	cfg := apiConfig{0}
+	// Connect to database, load environment variables from .env-file
+	// and set up api config
+	var db *fsdb.DB
+	var dbErr error
+	if debug {
+		db, dbErr = fsdb.NewDB("./database.debug.json")
+	} else {
+		db, dbErr = fsdb.NewDB("./database.json")
+	}
+	if dbErr != nil {
+		log.Fatal("Could not open database connection", dbErr.Error())
+	}
+	godotenv.Load()
+	cfg := apiConfig{0, os.Getenv("JWT_SECRET"), db}
 
 	mainRouter := chi.NewRouter()
 	apiRouter := chi.NewRouter()
@@ -26,23 +46,14 @@ func startServer(port string, debug bool, dbPathChan chan string) {
 
 	adminRouter.Get("/metrics", cfg.serveHitCountMetrics)
 
-	var db *fsdb.DB
-	var dbErr error
-	if debug {
-		db, dbErr = fsdb.NewDB("./database.debug.json")
-	} else {
-		db, dbErr = fsdb.NewDB("./database.json")
-	}
-	if dbErr != nil {
-		log.Fatal("Could not open database connection", dbErr.Error())
-	}
-
 	apiRouter.Get("/healthz", readinessHandler)
 	apiRouter.HandleFunc("/reset", cfg.resetHitCountMetrics)
-	apiRouter.Post("/chirps", makeChirpsPostHandler(db))
-	apiRouter.Get("/chirps", makeChirpsGetHandler(db))
-	apiRouter.Get("/chirps/{chirpId}", makeChirpsGetUniqueHandler(db))
-	apiRouter.Post("/users", makeCreateUserHandler(db))
+	apiRouter.Post("/chirps", cfg.chirpsPostHandler)
+	apiRouter.Get("/chirps", cfg.chirpsGetHandler)
+	apiRouter.Get("/chirps/{chirpId}", cfg.chirpsGetUniqueHandler)
+	apiRouter.Post("/users", cfg.createUserHandler)
+	apiRouter.Put("/users", cfg.updateUserHandler)
+	apiRouter.Post("/login", cfg.loginHandler)
 
 	mainRouter.Mount("/api/", apiRouter)
 	mainRouter.Mount("/admin/", adminRouter)
