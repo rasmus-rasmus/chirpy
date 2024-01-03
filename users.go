@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fsdb"
 	"net/http"
 	"strconv"
 	"strings"
@@ -38,8 +37,8 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
-	requestToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
-	token, validationErr := validateToken(requestToken, cfg.jwtSecret)
+	accessToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	token, validationErr := validateAccessToken(accessToken, cfg.jwtSecret)
 	if validationErr != nil || !token.Valid {
 		respondWithError(w, 401, validationErr.Error())
 		return
@@ -75,43 +74,4 @@ func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	respondWithJSON(w, 200, user)
-}
-
-func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	reqBody := struct {
-		Email            string `json:"email"`
-		Password         string `json:"password"`
-		ExpiresInSeconds int    `json:"expires_in_seconds"`
-	}{}
-	decoderErr := decoder.Decode(&reqBody)
-	if decoderErr != nil {
-		respondWithError(w, 500, decoderErr.Error())
-		return
-	}
-	user, validateErr := cfg.db.ValidateUser(reqBody.Email, reqBody.Password)
-	if validateErr == nil {
-		var expirationTime int
-		if reqBody.ExpiresInSeconds <= 0 || reqBody.ExpiresInSeconds > 24*60*60 {
-			expirationTime = 24 * 60 * 60
-		} else {
-			expirationTime = reqBody.ExpiresInSeconds
-		}
-		signedToken, tokenErr := generateToken(user.Id, expirationTime, cfg.jwtSecret)
-		if tokenErr != nil {
-			respondWithError(w, 500, tokenErr.Error())
-			return
-		}
-		type UserWithToken struct {
-			fsdb.User
-			Token string `json:"token"`
-		}
-		respondWithJSON(w, 200, UserWithToken{user, signedToken})
-	} else if validateErr.Error() == "Incorrect password" {
-		respondWithError(w, 401, "Password didn't match")
-	} else if validateErr.Error() == "User doesn't exist" {
-		respondWithError(w, 401, "No user with that email")
-	} else {
-		respondWithError(w, 500, validateErr.Error())
-	}
 }

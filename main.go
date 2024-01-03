@@ -48,12 +48,17 @@ func startServer(port string, debug bool, dbPathChan chan string) {
 
 	apiRouter.Get("/healthz", readinessHandler)
 	apiRouter.HandleFunc("/reset", cfg.resetHitCountMetrics)
+
 	apiRouter.Post("/chirps", cfg.chirpsPostHandler)
 	apiRouter.Get("/chirps", cfg.chirpsGetHandler)
 	apiRouter.Get("/chirps/{chirpId}", cfg.chirpsGetUniqueHandler)
+
 	apiRouter.Post("/users", cfg.createUserHandler)
 	apiRouter.Put("/users", cfg.updateUserHandler)
 	apiRouter.Post("/login", cfg.loginHandler)
+
+	apiRouter.Post("/refresh", cfg.refreshHandler)
+	apiRouter.Post("/revoke", cfg.revokeHandler)
 
 	mainRouter.Mount("/api/", apiRouter)
 	mainRouter.Mount("/admin/", adminRouter)

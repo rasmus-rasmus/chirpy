@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -18,9 +19,10 @@ type DB struct {
 }
 
 type DBStructure struct {
-	Chirps   map[int]Chirp     `json:"chirps"`
-	Users    map[int]DBUser    `json:"users"`
-	Metadata map[string]string `json:"metadata"`
+	Chirps        map[int]Chirp        `json:"chirps"`
+	Users         map[int]DBUser       `json:"users"`
+	RevokedTokens map[string]time.Time `json:"revoked-tokens"`
+	Metadata      map[string]string    `json:"metadata"`
 }
 
 type Chirp struct {
@@ -63,7 +65,12 @@ func (db *DB) loadDB() (DBStructure, error) {
 func (db *DB) ensureDB() error {
 	_, statErr := os.Stat(db.Path)
 	if errors.Is(statErr, os.ErrNotExist) {
-		dbStructure := DBStructure{make(map[int]Chirp), make(map[int]DBUser), map[string]string{"nextChirpId": "1", "nextUserId": "1"}}
+		dbStructure := DBStructure{
+			make(map[int]Chirp),
+			make(map[int]DBUser),
+			make(map[string]time.Time),
+			map[string]string{"nextChirpId": "1", "nextUserId": "1"},
+		}
 		return db.writeDB(dbStructure)
 	}
 	return statErr
@@ -139,7 +146,7 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 	return newUser.User, writeErr
 }
 
-func (db *DB) ValidateUser(email string, password string) (User, error) {
+func (db *DB) AuthenticateUser(email string, password string) (User, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	dbStructure, loadErr := db.loadDB()
@@ -187,6 +194,31 @@ func (db *DB) UpdateUser(userId int, newEmail, newPassword string) (User, error)
 	dbStructure.Users[userId] = user
 	writeErr := db.writeDB(dbStructure)
 	return user.User, writeErr
+}
+
+func (db *DB) RevokeToken(token string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return loadErr
+	}
+	dbStructure.RevokedTokens[token] = time.Now()
+	return db.writeDB(dbStructure)
+}
+
+func (db *DB) IsTokenRevoked(token string) (bool, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return false, loadErr
+	}
+	_, ok := dbStructure.RevokedTokens[token]
+	if !ok {
+		return false, nil
+	}
+	return true, nil
 }
 
 func NewDB(path string) (*DB, error) {
