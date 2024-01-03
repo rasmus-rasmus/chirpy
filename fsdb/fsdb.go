@@ -26,9 +26,9 @@ type DBStructure struct {
 }
 
 type Chirp struct {
-	AuthoId int    `json:"author_id"`
-	Id      int    `json:"id"`
-	Body    string `json:"body"`
+	AuthorId int    `json:"author_id"`
+	Id       int    `json:"id"`
+	Body     string `json:"body"`
 }
 
 type User struct {
@@ -117,11 +117,29 @@ func (db *DB) CreateChirp(body string, createdById int) (Chirp, error) {
 	if atoiErr != nil {
 		return Chirp{}, atoiErr
 	}
-	newChirp := Chirp{AuthoId: createdById, Id: nextChirpId, Body: body}
+	newChirp := Chirp{AuthorId: createdById, Id: nextChirpId, Body: body}
 	dbStructure.Chirps[nextChirpId] = newChirp
 	dbStructure.Metadata["nextChirpId"] = fmt.Sprintf("%d", nextChirpId+1)
 	writeErr := db.writeDB(dbStructure)
 	return newChirp, writeErr
+}
+
+func (db *DB) DeleteChirp(chirpId, userId int) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return loadErr
+	}
+	chirp, ok := dbStructure.Chirps[chirpId]
+	if !ok {
+		return errors.New("Resource doesn't exist")
+	}
+	if chirp.AuthorId != userId {
+		return errors.New("Unauthorized")
+	}
+	delete(dbStructure.Chirps, chirpId)
+	return db.writeDB(dbStructure)
 }
 
 func (db *DB) CreateUser(email string, password string) (User, error) {

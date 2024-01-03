@@ -71,6 +71,34 @@ func (cfg *apiConfig) chirpsGetUniqueHandler(w http.ResponseWriter, r *http.Requ
 	respondWithJSON(w, 200, chirp)
 }
 
+func (cfg *apiConfig) chirpsDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	parsedToken, validationErr := cfg.validateToken(accessToken, string(TokenTypeAccess))
+	if validationErr != nil {
+		respondWithError(w, 401, validationErr.Error())
+		return
+	}
+	userId, idErr := getUserId(parsedToken)
+	if idErr != nil {
+		respondWithError(w, 500, idErr.Error())
+		return
+	}
+	chirpId, atoiErr := strconv.Atoi(chi.URLParam(r, "chirpId"))
+	if atoiErr != nil {
+		respondWithError(w, 500, atoiErr.Error())
+	}
+	deleteErr := cfg.db.DeleteChirp(chirpId, userId)
+	if deleteErr != nil {
+		if deleteErr.Error() == "Unauthorized" {
+			respondWithError(w, 403, deleteErr.Error())
+			return
+		}
+		respondWithError(w, 500, deleteErr.Error())
+		return
+	}
+	respondWithJSON(w, 200, struct{}{})
+}
+
 func validateChirp(chirpBody string) (string, error) {
 	if len(chirpBody) > 140 {
 		return "", errors.New("Chirp is too long")

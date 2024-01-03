@@ -52,6 +52,7 @@ func startServer(port string, debug bool, dbPathChan chan string) {
 	apiRouter.Post("/chirps", cfg.chirpsPostHandler)
 	apiRouter.Get("/chirps", cfg.chirpsGetHandler)
 	apiRouter.Get("/chirps/{chirpId}", cfg.chirpsGetUniqueHandler)
+	apiRouter.Delete("/chirps/{chirpId}", cfg.chirpsDeleteHandler)
 
 	apiRouter.Post("/users", cfg.createUserHandler)
 	apiRouter.Put("/users", cfg.updateUserHandler)
