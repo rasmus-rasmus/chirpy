@@ -12,6 +12,17 @@ import (
 )
 
 func (cfg *apiConfig) chirpsPostHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	parsedToken, validationErr := cfg.validateToken(accessToken, string(TokenTypeAccess))
+	if validationErr != nil {
+		respondWithError(w, 401, validationErr.Error())
+		return
+	}
+	userId, idErr := getUserId(parsedToken)
+	if idErr != nil {
+		respondWithError(w, 500, idErr.Error())
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	reqBody := struct {
 		Body string `json:"body"`
@@ -27,7 +38,7 @@ func (cfg *apiConfig) chirpsPostHandler(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, 400, validationErr.Error())
 		return
 	}
-	chirp, createErr := cfg.db.CreateChirp(cleanBody)
+	chirp, createErr := cfg.db.CreateChirp(cleanBody, userId)
 	if createErr != nil {
 		respondWithError(w, 500, createErr.Error())
 	}

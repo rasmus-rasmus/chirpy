@@ -38,7 +38,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 
 func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
-	token, validationErr := validateAccessToken(accessToken, cfg.jwtSecret)
+	token, validationErr := cfg.validateToken(accessToken, "chirpy-access")
 	if validationErr != nil || !token.Valid {
 		respondWithError(w, 401, validationErr.Error())
 		return

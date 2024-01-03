@@ -3,9 +3,19 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+)
+
+type TokenType string
+
+const (
+	// TokenTypeAccess -
+	TokenTypeAccess TokenType = "chirpy-access"
+	// TokenTypeRefresh -
+	TokenTypeRefresh TokenType = "chirpy-refresh"
 )
 
 func generateToken(issuer string, userId int, jwtSecret string, expirationDuration time.Duration) (string, error) {
@@ -20,33 +30,65 @@ func generateToken(issuer string, userId int, jwtSecret string, expirationDurati
 }
 
 func generateAccessToken(userId int, jwtSecret string) (string, error) {
-	return generateToken("chirpy-access", userId, jwtSecret, time.Hour)
+	return generateToken(string(TokenTypeAccess), userId, jwtSecret, time.Hour)
 }
 
 func generateRefreshToken(userId int, jwtSecret string) (string, error) {
-	return generateToken("chirpy-refresh", userId, jwtSecret, time.Duration(24*60)*time.Hour)
+	return generateToken(string(TokenTypeRefresh), userId, jwtSecret, time.Duration(24*60)*time.Hour)
 }
 
-func validateAccessToken(accessToken, secret string) (*jwt.Token, error) {
-	parsedToken, error := jwt.ParseWithClaims(accessToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) { return []byte(secret), nil })
+func (cfg *apiConfig) validateToken(token, expectedIssuer string) (*jwt.Token, error) {
+	parsedToken, error := jwt.ParseWithClaims(token, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) { return []byte(cfg.jwtSecret), nil })
 	if error != nil {
 		return parsedToken, error
 	}
 	issuer, _ := parsedToken.Claims.GetIssuer()
-	if issuer != "chirpy-access" {
-		return parsedToken, errors.New("Unautorized: cannot use refresh token for access")
+	if issuer != expectedIssuer {
+		return parsedToken, errors.New("Unauthorized issuer")
+	}
+	if isIssuerRevokable(issuer) {
+		revokeErr := cfg.db.IsTokenRevoked(token)
+		return parsedToken, revokeErr
 	}
 	return parsedToken, nil
 }
 
-func validateRefreshToken(accessToken, secret string) (*jwt.Token, error) {
-	parsedToken, error := jwt.ParseWithClaims(accessToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) { return []byte(secret), nil })
-	if error != nil {
-		return parsedToken, error
+func isIssuerRevokable(issuer string) bool {
+	return issuer == string(TokenTypeRefresh)
+}
+
+// func validateAccessToken(accessToken, secret string) (*jwt.Token, error) {
+// 	parsedToken, error := jwt.ParseWithClaims(accessToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) { return []byte(secret), nil })
+// 	if error != nil {
+// 		return parsedToken, error
+// 	}
+// 	issuer, _ := parsedToken.Claims.GetIssuer()
+// 	if issuer != "chirpy-access" {
+// 		return parsedToken, errors.New("Unauthorized issuer")
+// 	}
+// 	return parsedToken, nil
+// }
+
+// func validateRefreshToken(accessToken, secret string) (*jwt.Token, error) {
+// 	parsedToken, error := jwt.ParseWithClaims(accessToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) { return []byte(secret), nil })
+// 	if error != nil {
+// 		return parsedToken, error
+// 	}
+// 	issuer, _ := parsedToken.Claims.GetIssuer()
+// 	if issuer != "chirpy-refresh" {
+// 		return parsedToken, errors.New("Unauthorized issuer")
+// 	}
+// 	return parsedToken, nil
+// }
+
+func getUserId(token *jwt.Token) (int, error) {
+	stringifiedUserId, subjectErr := token.Claims.GetSubject()
+	if subjectErr != nil {
+		return 0, subjectErr
 	}
-	issuer, _ := parsedToken.Claims.GetIssuer()
-	if issuer != "chirpy-refresh" {
-		return parsedToken, errors.New("Unautorized: cannot use access token for refresh")
+	userId, atoiErr := strconv.Atoi(stringifiedUserId)
+	if atoiErr != nil {
+		return 0, atoiErr
 	}
-	return parsedToken, nil
+	return userId, nil
 }

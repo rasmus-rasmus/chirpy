@@ -26,8 +26,9 @@ type DBStructure struct {
 }
 
 type Chirp struct {
-	Id   int    `json:"id"`
-	Body string `json:"body"`
+	AuthoId int    `json:"author_id"`
+	Id      int    `json:"id"`
+	Body    string `json:"body"`
 }
 
 type User struct {
@@ -105,7 +106,7 @@ func (db *DB) GetUniqueChirp(chirpId int) (Chirp, error) {
 	return chirp, nil
 }
 
-func (db *DB) CreateChirp(body string) (Chirp, error) {
+func (db *DB) CreateChirp(body string, createdById int) (Chirp, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	dbStructure, loadErr := db.loadDB()
@@ -116,7 +117,7 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 	if atoiErr != nil {
 		return Chirp{}, atoiErr
 	}
-	newChirp := Chirp{Id: nextChirpId, Body: body}
+	newChirp := Chirp{AuthoId: createdById, Id: nextChirpId, Body: body}
 	dbStructure.Chirps[nextChirpId] = newChirp
 	dbStructure.Metadata["nextChirpId"] = fmt.Sprintf("%d", nextChirpId+1)
 	writeErr := db.writeDB(dbStructure)
@@ -207,18 +208,18 @@ func (db *DB) RevokeToken(token string) error {
 	return db.writeDB(dbStructure)
 }
 
-func (db *DB) IsTokenRevoked(token string) (bool, error) {
+func (db *DB) IsTokenRevoked(token string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	dbStructure, loadErr := db.loadDB()
 	if loadErr != nil {
-		return false, loadErr
+		return loadErr
 	}
 	_, ok := dbStructure.RevokedTokens[token]
-	if !ok {
-		return false, nil
+	if ok {
+		return errors.New("Token revoked")
 	}
-	return true, nil
+	return nil
 }
 
 func NewDB(path string) (*DB, error) {

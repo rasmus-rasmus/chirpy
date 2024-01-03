@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fsdb"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -48,29 +47,14 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 	refreshToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
-	token, validationErr := validateRefreshToken(refreshToken, cfg.jwtSecret)
+	token, validationErr := cfg.validateToken(refreshToken, string(TokenTypeRefresh))
 	if validationErr != nil || !token.Valid {
 		respondWithError(w, 401, validationErr.Error())
 		return
 	}
-	isRevoked, revokeErr := cfg.db.IsTokenRevoked(refreshToken)
-	if revokeErr != nil {
-		respondWithError(w, 500, revokeErr.Error())
-		return
-	}
-	if isRevoked {
-		respondWithError(w, 401, "Token revoked")
-		return
-	}
-	stringifiedUserId, subjectErr := token.Claims.GetSubject()
-	if subjectErr != nil {
-		respondWithJSON(w, 500, subjectErr.Error())
-		return
-	}
-	userId, atoiErr := strconv.Atoi(stringifiedUserId)
-	if atoiErr != nil {
-		respondWithJSON(w, 500, atoiErr.Error())
-		return
+	userId, idErr := getUserId(token)
+	if idErr != nil {
+		respondWithError(w, 500, idErr.Error())
 	}
 	accesToken, tokenErr := generateAccessToken(userId, cfg.jwtSecret)
 	if tokenErr != nil {
@@ -83,7 +67,7 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) revokeHandler(w http.ResponseWriter, r *http.Request) {
 	refreshToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
-	token, validationErr := validateRefreshToken(refreshToken, cfg.jwtSecret)
+	token, validationErr := cfg.validateToken(refreshToken, string(TokenTypeRefresh))
 	if validationErr != nil || !token.Valid {
 		respondWithError(w, 401, validationErr.Error())
 		return
