@@ -104,6 +104,23 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	return allChirps, nil
 }
 
+func (db *DB) GetChirpsFromAuthor(authorId int) ([]Chirp, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return []Chirp{}, loadErr
+	}
+	allChirpsByAuthor := make([]Chirp, 0, len(dbStructure.Chirps))
+	for _, chirp := range dbStructure.Chirps {
+		if chirp.AuthorId == authorId {
+			allChirpsByAuthor = append(allChirpsByAuthor, chirp)
+		}
+	}
+	sort.Slice(allChirpsByAuthor, func(i, j int) bool { return allChirpsByAuthor[i].Id < allChirpsByAuthor[j].Id })
+	return allChirpsByAuthor, nil
+}
+
 func (db *DB) GetUniqueChirp(chirpId int) (Chirp, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()

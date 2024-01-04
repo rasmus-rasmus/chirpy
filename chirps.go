@@ -52,10 +52,26 @@ func (cfg *apiConfig) chirpsPostHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (cfg *apiConfig) chirpsGetHandler(w http.ResponseWriter, r *http.Request) {
-	chirps, getErr := cfg.db.GetChirps()
+	authorIdParam := r.URL.Query().Get("author_id")
+	var chirps []fsdb.Chirp
+	var getErr error
+	if len(authorIdParam) == 0 {
+		chirps, getErr = cfg.db.GetChirps()
+	} else {
+		authorId, convErr := strconv.Atoi(authorIdParam)
+		if convErr != nil {
+			respondWithError(w, 500, convErr.Error())
+			return
+		}
+		chirps, getErr = cfg.db.GetChirpsFromAuthor(authorId)
+	}
 	if getErr != nil {
 		respondWithError(w, 500, getErr.Error())
 		return
+	}
+	sort := r.URL.Query().Get("sort")
+	if sort == "desc" {
+		slices.Reverse(chirps)
 	}
 	respondWithJSON(w, 200, chirps)
 }
