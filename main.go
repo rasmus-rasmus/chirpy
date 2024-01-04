@@ -17,6 +17,7 @@ import (
 type apiConfig struct {
 	fileServerHits int
 	jwtSecret      string
+	polkaApiKey    string
 	db             *fsdb.DB
 }
 
@@ -34,7 +35,12 @@ func startServer(port string, debug bool, dbPathChan chan string) {
 		log.Fatal("Could not open database connection", dbErr.Error())
 	}
 	godotenv.Load()
-	cfg := apiConfig{0, os.Getenv("JWT_SECRET"), db}
+	cfg := apiConfig{
+		fileServerHits: 0,
+		jwtSecret:      os.Getenv("JWT_SECRET"),
+		polkaApiKey:    os.Getenv("POLKA_API_KEY"),
+		db:             db,
+	}
 
 	mainRouter := chi.NewRouter()
 	apiRouter := chi.NewRouter()
@@ -60,6 +66,8 @@ func startServer(port string, debug bool, dbPathChan chan string) {
 
 	apiRouter.Post("/refresh", cfg.refreshHandler)
 	apiRouter.Post("/revoke", cfg.revokeHandler)
+
+	apiRouter.Post("/polka/webhooks", cfg.polkaWebhookHandler)
 
 	mainRouter.Mount("/api/", apiRouter)
 	mainRouter.Mount("/admin/", adminRouter)

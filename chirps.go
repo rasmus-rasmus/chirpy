@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fsdb"
 	"net/http"
 	"slices"
 	"strconv"
@@ -12,7 +13,12 @@ import (
 )
 
 func (cfg *apiConfig) chirpsPostHandler(w http.ResponseWriter, r *http.Request) {
-	accessToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	authHeader := strings.Split(r.Header.Get("Authorization"), " ")
+	if len(authHeader) < 2 || authHeader[0] != "Bearer" {
+		respondWithError(w, 401, "Missing authorization")
+		return
+	}
+	accessToken := authHeader[1]
 	parsedToken, validationErr := cfg.validateToken(accessToken, string(TokenTypeAccess))
 	if validationErr != nil {
 		respondWithError(w, 401, validationErr.Error())
@@ -72,7 +78,12 @@ func (cfg *apiConfig) chirpsGetUniqueHandler(w http.ResponseWriter, r *http.Requ
 }
 
 func (cfg *apiConfig) chirpsDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	accessToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	authHeader := strings.Split(r.Header.Get("Authorization"), " ")
+	if len(authHeader) < 2 || authHeader[0] != "Bearer" {
+		respondWithError(w, 401, "Missing authorization")
+		return
+	}
+	accessToken := authHeader[1]
 	parsedToken, validationErr := cfg.validateToken(accessToken, string(TokenTypeAccess))
 	if validationErr != nil {
 		respondWithError(w, 401, validationErr.Error())
@@ -89,14 +100,14 @@ func (cfg *apiConfig) chirpsDeleteHandler(w http.ResponseWriter, r *http.Request
 	}
 	deleteErr := cfg.db.DeleteChirp(chirpId, userId)
 	if deleteErr != nil {
-		if deleteErr.Error() == "Unauthorized" {
+		if deleteErr.Error() == string(fsdb.Unauthorized) {
 			respondWithError(w, 403, deleteErr.Error())
 			return
 		}
 		respondWithError(w, 500, deleteErr.Error())
 		return
 	}
-	respondWithJSON(w, 200, struct{}{})
+	w.WriteHeader(200)
 }
 
 func validateChirp(chirpBody string) (string, error) {

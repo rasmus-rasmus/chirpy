@@ -57,30 +57,6 @@ func isIssuerRevokable(issuer string) bool {
 	return issuer == string(TokenTypeRefresh)
 }
 
-// func validateAccessToken(accessToken, secret string) (*jwt.Token, error) {
-// 	parsedToken, error := jwt.ParseWithClaims(accessToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) { return []byte(secret), nil })
-// 	if error != nil {
-// 		return parsedToken, error
-// 	}
-// 	issuer, _ := parsedToken.Claims.GetIssuer()
-// 	if issuer != "chirpy-access" {
-// 		return parsedToken, errors.New("Unauthorized issuer")
-// 	}
-// 	return parsedToken, nil
-// }
-
-// func validateRefreshToken(accessToken, secret string) (*jwt.Token, error) {
-// 	parsedToken, error := jwt.ParseWithClaims(accessToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) { return []byte(secret), nil })
-// 	if error != nil {
-// 		return parsedToken, error
-// 	}
-// 	issuer, _ := parsedToken.Claims.GetIssuer()
-// 	if issuer != "chirpy-refresh" {
-// 		return parsedToken, errors.New("Unauthorized issuer")
-// 	}
-// 	return parsedToken, nil
-// }
-
 func getUserId(token *jwt.Token) (int, error) {
 	stringifiedUserId, subjectErr := token.Claims.GetSubject()
 	if subjectErr != nil {

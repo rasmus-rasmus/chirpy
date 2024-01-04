@@ -32,14 +32,26 @@ type Chirp struct {
 }
 
 type User struct {
-	Id    int    `json:"id"`
-	Email string `json:"email"`
+	Id          int    `json:"id"`
+	Email       string `json:"email"`
+	IsChirpyRed bool   `json:"is_chirpy_red"`
 }
 
 type DBUser struct {
 	User
 	Password string `json:"password"`
 }
+
+type ErrorMessage string
+
+const (
+	InvalidUserId     ErrorMessage = "Invalid user id"
+	TokenRevoked      ErrorMessage = "Token revoked"
+	IncorrectPassword ErrorMessage = "Incorrect password"
+	UserNotExist      ErrorMessage = "User doesn't exist"
+	Unauthorized      ErrorMessage = "Unauthorized"
+	ResourceNotExist  ErrorMessage = "Resource doesn't exist"
+)
 
 // NB: Only exported functions are ensured to be thread safe
 func (db *DB) writeDB(dbStructure DBStructure) error {
@@ -133,10 +145,10 @@ func (db *DB) DeleteChirp(chirpId, userId int) error {
 	}
 	chirp, ok := dbStructure.Chirps[chirpId]
 	if !ok {
-		return errors.New("Resource doesn't exist")
+		return errors.New(string(ResourceNotExist))
 	}
 	if chirp.AuthorId != userId {
-		return errors.New("Unauthorized")
+		return errors.New(string(Unauthorized))
 	}
 	delete(dbStructure.Chirps, chirpId)
 	return db.writeDB(dbStructure)
@@ -158,7 +170,7 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 	if atoiErr != nil {
 		return User{}, atoiErr
 	}
-	newUser := DBUser{User: User{nextUserId, email}, Password: password}
+	newUser := DBUser{User: User{nextUserId, email, false}, Password: password}
 	dbStructure.Users[nextUserId] = newUser
 	dbStructure.Metadata["nextUserId"] = fmt.Sprintf("%d", nextUserId+1)
 	writeErr := db.writeDB(dbStructure)
@@ -177,10 +189,10 @@ func (db *DB) AuthenticateUser(email string, password string) (User, error) {
 			if bcrypt.CompareHashAndPassword([]byte(val.Password), []byte(password)) == nil {
 				return val.User, nil
 			}
-			return User{}, errors.New("Incorrect password")
+			return User{}, errors.New(string(IncorrectPassword))
 		}
 	}
-	return User{}, errors.New("User doesn't exist")
+	return User{}, errors.New(string(UserNotExist))
 }
 
 func (db *DB) GetUser(userId int) (User, error) {
@@ -192,7 +204,7 @@ func (db *DB) GetUser(userId int) (User, error) {
 	}
 	user, ok := dbStructure.Users[userId]
 	if !ok {
-		return User{}, errors.New("Invalid user id")
+		return User{}, errors.New(string(InvalidUserId))
 	}
 	return user.User, nil
 }
@@ -206,13 +218,29 @@ func (db *DB) UpdateUser(userId int, newEmail, newPassword string) (User, error)
 	}
 	user, ok := dbStructure.Users[userId]
 	if !ok {
-		return User{}, errors.New("Invalid user id")
+		return User{}, errors.New(string(InvalidUserId))
 	}
 	user.Email = newEmail
 	user.Password = newPassword
 	dbStructure.Users[userId] = user
 	writeErr := db.writeDB(dbStructure)
 	return user.User, writeErr
+}
+
+func (db *DB) UpgradeUser(userId int) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	dbStructure, loadErr := db.loadDB()
+	if loadErr != nil {
+		return loadErr
+	}
+	user, ok := dbStructure.Users[userId]
+	if !ok {
+		return errors.New(string(InvalidUserId))
+	}
+	user.IsChirpyRed = true
+	dbStructure.Users[userId] = user
+	return db.writeDB(dbStructure)
 }
 
 func (db *DB) RevokeToken(token string) error {
@@ -235,7 +263,7 @@ func (db *DB) IsTokenRevoked(token string) error {
 	}
 	_, ok := dbStructure.RevokedTokens[token]
 	if ok {
-		return errors.New("Token revoked")
+		return errors.New(string(TokenRevoked))
 	}
 	return nil
 }

@@ -36,9 +36,9 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 			RefreshToken string `json:"refresh_token"`
 		}
 		respondWithJSON(w, 200, UserWithTokens{user, signedAccessToken, signedRefreshToken})
-	} else if validateErr.Error() == "Incorrect password" {
+	} else if validateErr.Error() == string(fsdb.IncorrectPassword) {
 		respondWithError(w, 401, "Password didn't match")
-	} else if validateErr.Error() == "User doesn't exist" {
+	} else if validateErr.Error() == string(fsdb.UserNotExist) {
 		respondWithError(w, 401, "No user with that email")
 	} else {
 		respondWithError(w, 500, validateErr.Error())
@@ -46,7 +46,12 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
-	refreshToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	authHeader := strings.Split(r.Header.Get("Authorization"), " ")
+	if len(authHeader) < 2 || authHeader[0] != "Bearer" {
+		respondWithError(w, 401, "Missing authorization")
+		return
+	}
+	refreshToken := authHeader[1]
 	token, validationErr := cfg.validateToken(refreshToken, string(TokenTypeRefresh))
 	if validationErr != nil || !token.Valid {
 		respondWithError(w, 401, validationErr.Error())
@@ -66,7 +71,12 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) revokeHandler(w http.ResponseWriter, r *http.Request) {
-	refreshToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	authHeader := strings.Split(r.Header.Get("Authorization"), " ")
+	if len(authHeader) < 2 || authHeader[0] != "Bearer" {
+		respondWithError(w, 401, "Missing authorization")
+		return
+	}
+	refreshToken := authHeader[1]
 	token, validationErr := cfg.validateToken(refreshToken, string(TokenTypeRefresh))
 	if validationErr != nil || !token.Valid {
 		respondWithError(w, 401, validationErr.Error())

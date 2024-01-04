@@ -37,7 +37,12 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
-	accessToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
+	authHeader := strings.Split(r.Header.Get("Authorization"), " ")
+	if len(authHeader) < 2 || authHeader[0] != "Bearer" {
+		respondWithError(w, 401, "Missing authorization")
+		return
+	}
+	accessToken := authHeader[1]
 	token, validationErr := cfg.validateToken(accessToken, "chirpy-access")
 	if validationErr != nil || !token.Valid {
 		respondWithError(w, 401, validationErr.Error())
